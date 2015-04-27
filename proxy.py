@@ -3,15 +3,16 @@
 # Assigment 5: HTTP Proxy
 # April 7, 2015
 
-
 import os,sys,thread,socket,calendar,time
+import config
 
 #********* CONSTANT VARIABLES *********
-BACKLOG = 50            # how many pending connections queue will hold
-MAX_DATA_RECV = 999999  # max number of bytes we receive at once
-DEBUG = True            # set to True to see the debug msgs
-BLOCKED = []            # [] for no blocking at all.
-CACHE_SIZE = 20         # maximum number of files that can be stored in the cache
+BACKLOG = config.backlog            # how many pending connections queue will hold
+MAX_DATA_RECV = config.max_data_recv  # max number of bytes we receive at once
+DEBUG = config.debug            # set to True to see the debug msgs
+BLOCKED = config.blocked            # [] for no blocking at all.
+IP_BLOCKED = config.ip_blocked
+CACHE_SIZE = config.cache_size         # maximum number of files that can be stored in the cache
 
 #**************************************
 #********* MAIN PROGRAM ***************
@@ -28,12 +29,12 @@ def main():
     # host and port info.
     host = ''               # blank for localhost
     
-    print "Proxy Server Running on ",host,":",port
+    print "Proxy Server Running on ", host,":", port
 
     try:
         # create a socket
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+        
         # associate the socket to host and port
         s.bind((host, port))
 
@@ -67,8 +68,8 @@ def printout(type, request, address):
     print address[0],"\t",type,"\t",request
 
 
-cache = [""] * CACHE_SIZE
-num_cache_entries = 0
+cache = [""] * CACHE_SIZE   # Array of the files that are currently stored in the cache in LRU order
+num_cache_entries = 0   # Place to insert the next item to be cached
 #*******************************************
 #********* PROXY_THREAD FUNC ***************
 # A thread to handle request from browser
@@ -80,7 +81,6 @@ def proxy_thread(conn, client_addr):
 
     # get the request from browser
     request = conn.recv(MAX_DATA_RECV)
-    # print request
 
     first_line = request.split('\n')[0]     # parse the first line
 
@@ -91,7 +91,8 @@ def proxy_thread(conn, client_addr):
 
     # check if url is blocked
     for i in range(0, len(BLOCKED)):
-        if BLOCKED[i] in url:
+        print url
+        if BLOCKED[i] in url or IP_BLOCKED[i] in url:
             printout("Blacklisted", first_line, client_addr)
             conn.close()
             sys.exit(1)
@@ -118,11 +119,9 @@ def proxy_thread(conn, client_addr):
     if (port_pos == -1 or webserver_pos < port_pos):      # default port
         port = 80
         webserver = temp[:webserver_pos] # webserver is the name of the server from which the client requested data
-        #print webserver
-    else:       # specific port
+    else:   # specific port
         port = int((temp[(port_pos + 1):])[:webserver_pos - port_pos - 1])
         webserver = temp[:port_pos]
-        #print webserver
 
     try:
         cur_time = calendar.timegm(time.gmtime())
@@ -167,14 +166,15 @@ def proxy_thread(conn, client_addr):
 
             while 1:
                 # receive data from web server
-                data = s.recv(MAX_DATA_RECV) # Max - Change to recvfrom to also get the address from which data is receive - When implementing multiple clients
+                data = s.recv(MAX_DATA_RECV)
                                
                 if (len(data) > 0):
                     cache_file = open(url_file_name, "a+") # Update the cache with new version of file from webserver
                     cache_file.write(data)
                     cache_file.close()
+
                     # send to browser
-                    conn.send(data) # Max - Change to sendto to specify the address to send the data to - When implementing multiple clients
+                    conn.send(data) 
                 else:
                     break
             s.close()
